@@ -40,7 +40,7 @@ apiClient.interceptors.request.use(
   (error) => {
     return Promise.reject(error)
   }
-})
+)
 
 // Response interceptor
 apiClient.interceptors.response.use(
