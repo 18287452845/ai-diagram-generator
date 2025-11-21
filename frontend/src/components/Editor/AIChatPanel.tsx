@@ -112,10 +112,16 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
       const conversation = getCurrentConversation()
       if (!conversation) throw new Error('No active conversation')
 
-      const messages = conversation.messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }))
+      const messages = conversation.messages
+        .filter((msg) => !msg.isStreaming && Boolean(msg.content.trim()))
+        .map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        }))
+
+      if (messages.length === 0) {
+        throw new Error('No valid chat messages to send')
+      }
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
