@@ -1,3 +1,4 @@
+import os
 from openai import AsyncOpenAI
 from app.core.config import settings
 from app.schemas.diagram import DiagramType, DiagramFormat
@@ -7,16 +8,17 @@ class DeepSeekService:
     def __init__(self):
         self._client = None
         self.model = "deepseek-reasoner"  # DeepSeek R1 model
-        self.base_url = "https://api.deepseek.com"  # Default base URL, can be overridden
+        self.base_url = settings.DEEPSEEK_BASE_URL  # Base URL from config, can be overridden
 
     @property
     def client(self):
         """Lazy initialization of DeepSeek client"""
         if self._client is None:
-            if not settings.DEEPSEEK_API_KEY:
+            api_key = settings.DEEPSEEK_API_KEY or os.environ.get("DEEPSEEK_API_KEY")
+            if not api_key:
                 raise ValueError("DEEPSEEK_API_KEY is not set")
             self._client = AsyncOpenAI(
-                api_key=settings.DEEPSEEK_API_KEY,
+                api_key=api_key,
                 base_url=self.base_url
             )
         return self._client
