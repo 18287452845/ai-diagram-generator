@@ -72,6 +72,7 @@ export interface ChatMessage {
   content: string
   timestamp: string
   isStreaming?: boolean
+  reasoning?: string // DeepSeek R1 思考过程
 }
 
 // Chat conversation

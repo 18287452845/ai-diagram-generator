@@ -9,6 +9,7 @@ interface ChatStore {
   createConversation: (diagramType: DiagramType, aiProvider: AIProvider) => string
   addMessage: (conversationId: string, message: ChatMessage) => void
   updateMessage: (conversationId: string, messageId: string, updates: Partial<ChatMessage>) => void
+  deleteMessage: (conversationId: string, messageId: string) => void
   clearConversation: (conversationId: string) => void
   deleteConversation: (conversationId: string) => void
   setCurrentConversation: (conversationId: string | null) => void
@@ -66,6 +67,21 @@ export const useChatStore = create<ChatStore>()(
                   messages: conv.messages.map((msg) =>
                     msg.id === messageId ? { ...msg, ...updates } : msg
                   ),
+                  updatedAt: now,
+                }
+              : conv
+          ),
+        }))
+      },
+
+      deleteMessage: (conversationId, messageId) => {
+        const now = new Date().toISOString()
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.filter((msg) => msg.id !== messageId),
                   updatedAt: now,
                 }
               : conv

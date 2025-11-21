@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Send, Loader2, Trash2, MessageSquare } from 'lucide-react'
+import { Sparkles, Send, Loader2, Trash2, MessageSquare, Copy, RotateCw, ChevronDown, ChevronUp, Brain } from 'lucide-react'
 import { DiagramType, AIProvider, ChatMessage } from '@/types/diagram'
 import { useChatStore } from '@/stores/chatStore'
 import { useConfigStore } from '@/stores/configStore'
@@ -33,6 +33,7 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
   const [aiProvider, setAIProvider] = useState<AIProvider>(AIProvider.CLAUDE)
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [thoughtsExpanded, setThoughtsExpanded] = useState<Record<string, boolean>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -41,6 +42,7 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
     createConversation,
     addMessage,
     updateMessage,
+    deleteMessage,
     clearConversation,
     getCurrentConversation,
     currentConversationId,
@@ -74,13 +76,19 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
     return null
   }
 
-  const handleSend = async () => {
-    if (!input.trim() || isStreaming) return
+  const sendPrompt = async (prompt: string, options: { preserveInput?: boolean } = {}) => {
+    const trimmedPrompt = prompt.trim()
+    if (!trimmedPrompt || isStreaming) return
 
+    if (!options.preserveInput) {
+      setInput('')
+    }
+
+    const timestamp = Date.now()
     const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${timestamp}`,
       role: 'user',
-      content: input.trim(),
+      content: trimmedPrompt,
       timestamp: new Date().toISOString(),
     }
 
@@ -88,14 +96,14 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
     if (!conversationId) {
       conversationId = createConversation(diagramType, aiProvider)
     }
+    const activeConversationId = conversationId
 
-    addMessage(conversationId, userMessage)
-    setInput('')
+    addMessage(activeConversationId, userMessage)
     setError(null)
     setIsStreaming(true)
     onGeneratingChange(true)
 
-    const assistantMessageId = `msg-${Date.now() + 1}`
+    const assistantMessageId = `msg-${timestamp + 1}`
     const assistantMessage: ChatMessage = {
       id: assistantMessageId,
       role: 'assistant',
@@ -104,13 +112,16 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
       isStreaming: true,
     }
 
-    addMessage(conversationId, assistantMessage)
+    addMessage(activeConversationId, assistantMessage)
 
     try {
       abortControllerRef.current = new AbortController()
 
       const conversation = getCurrentConversation()
       if (!conversation) throw new Error('No active conversation')
+
+      const targetDiagramType = conversation.diagramType ?? diagramType
+      const targetAIProvider = conversation.aiProvider ?? aiProvider
 
       const messages = conversation.messages
         .filter((msg) => !msg.isStreaming && Boolean(msg.content.trim()))
@@ -146,9 +157,9 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
         headers,
         body: JSON.stringify({
           messages,
-          diagramType,
+          diagramType: targetDiagramType,
           format: 'drawio',
-          aiProvider,
+          aiProvider: targetAIProvider,
         }),
         signal: abortControllerRef.current.signal,
       })
@@ -165,41 +176,49 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
       }
 
       let accumulatedContent = ''
+      let accumulatedReasoning = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        const chunk = decoder.decode(value)
+        const chunk = decoder.decode(value, { stream: true })
         const lines = chunk.split('\n')
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            try {
-              const parsed = JSON.parse(data)
-              
-              if (parsed.type === 'chunk' && parsed.content) {
-                accumulatedContent += parsed.content
-                updateMessage(conversationId!, assistantMessageId, {
-                  content: accumulatedContent,
-                })
-              } else if (parsed.type === 'done') {
-                updateMessage(conversationId!, assistantMessageId, {
-                  isStreaming: false,
-                })
-                
-                // Extract and render diagram if present
-                const diagramCode = extractDiagramCode(accumulatedContent)
-                if (diagramCode) {
-                  onGenerate(diagramCode)
-                }
-              } else if (parsed.type === 'error') {
-                throw new Error(parsed.message || 'Streaming error')
+        for (const rawLine of lines) {
+          const line = rawLine.trim()
+          if (!line.startsWith('data:')) continue
+
+          const data = line.slice(5).trim()
+          if (!data) continue
+
+          try {
+            const parsed = JSON.parse(data)
+
+            if (parsed.type === 'reasoning' && parsed.content) {
+              accumulatedReasoning += parsed.content
+              updateMessage(activeConversationId, assistantMessageId, {
+                reasoning: accumulatedReasoning,
+              })
+            } else if ((parsed.type === 'chunk' || parsed.type === 'content') && parsed.content) {
+              accumulatedContent += parsed.content
+              updateMessage(activeConversationId, assistantMessageId, {
+                content: accumulatedContent,
+              })
+            } else if (parsed.type === 'done') {
+              updateMessage(activeConversationId, assistantMessageId, {
+                isStreaming: false,
+              })
+
+              const diagramCode = extractDiagramCode(accumulatedContent)
+              if (diagramCode) {
+                onGenerate(diagramCode)
               }
-            } catch (e) {
-              console.error('Failed to parse stream data:', e)
+            } else if (parsed.type === 'error') {
+              throw new Error(parsed.message || 'Streaming error')
             }
+          } catch (e) {
+            console.error('Failed to parse stream data:', e, 'Data:', data)
           }
         }
       }
@@ -209,7 +228,7 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
       }
       const errorMessage = err instanceof Error ? err.message : '生成失败，请重试'
       setError(errorMessage)
-      updateMessage(conversationId!, assistantMessageId, {
+      updateMessage(activeConversationId, assistantMessageId, {
         content: `错误: ${errorMessage}`,
         isStreaming: false,
       })
@@ -220,10 +239,25 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
     }
   }
 
+  const handleSend = () => {
+    void sendPrompt(input)
+  }
+
   const handleClearChat = () => {
-    if (currentConversationId && confirm('确定要清空对话历史吗？')) {
-      clearConversation(currentConversationId)
+    if (!currentConversationId || !currentConversation?.messages.length) return
+    if (!confirm('确定要清空对话历史吗？')) return
+
+    if (isStreaming) {
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
+      setIsStreaming(false)
+      onGeneratingChange(false)
     }
+
+    clearConversation(currentConversationId)
+    setThoughtsExpanded({})
+    setError(null)
+    setInput('')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -232,6 +266,75 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
       handleSend()
     }
   }
+
+  const handleCopyMessage = async (message: ChatMessage) => {
+    try {
+      let textToCopy = message.content
+      if (message.reasoning) {
+        textToCopy = `${textToCopy}\n\n[思考过程]\n${message.reasoning}`
+      }
+      await navigator.clipboard.writeText(textToCopy)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  const handleDeleteMessage = (message: ChatMessage) => {
+    if (!currentConversationId) return
+
+    if (message.isStreaming) {
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
+      setIsStreaming(false)
+      onGeneratingChange(false)
+    }
+
+    deleteMessage(currentConversationId, message.id)
+    setThoughtsExpanded((prev) => {
+      if (!prev[message.id]) return prev
+      const next = { ...prev }
+      delete next[message.id]
+      return next
+    })
+  }
+
+  const handleResendMessage = (message: ChatMessage) => {
+    if (isStreaming) return
+
+    if (message.role === 'user') {
+      void sendPrompt(message.content, { preserveInput: true })
+      return
+    }
+
+    const conversation = getCurrentConversation()
+    if (!conversation) return
+
+    const currentIndex = conversation.messages.findIndex((msg) => msg.id === message.id)
+    if (currentIndex <= 0) return
+
+    const previousUserMessage = [...conversation.messages]
+      .slice(0, currentIndex)
+      .reverse()
+      .find((msg) => msg.role === 'user')
+
+    if (!previousUserMessage) return
+
+    void sendPrompt(previousUserMessage.content, { preserveInput: true })
+  }
+
+  const toggleThoughts = (messageId: string) => {
+    setThoughtsExpanded((prev) => ({
+      ...prev,
+      [messageId]: !prev[messageId],
+    }))
+  }
+
+  const getActionButtonClass = (role: 'user' | 'assistant') =>
+    `flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+      role === 'user'
+        ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
+        : 'bg-white text-gray-600 hover:bg-gray-200 dark:bg-gray-600/60 dark:text-gray-100 dark:hover:bg-gray-500'
+    }`
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800">
@@ -299,7 +402,7 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
             {currentConversation.messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} group`}
               >
                 <div
                   className={`max-w-[80%] rounded-lg px-4 py-2 ${
@@ -308,14 +411,71 @@ function AIChatPanel({ onGenerate, onGeneratingChange }: AIChatPanelProps) {
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
                   }`}
                 >
+                  {/* DeepSeek R1 思考过程 */}
+                  {message.reasoning && message.role === 'assistant' && (
+                    <div className="mb-3 border-l-2 border-purple-500 pl-3">
+                      <button
+                        onClick={() => toggleThoughts(message.id)}
+                        className="flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-sm font-medium mb-1"
+                      >
+                        <Brain size={16} />
+                        <span>思考过程</span>
+                        {thoughtsExpanded[message.id] ? (
+                          <ChevronUp size={16} />
+                        ) : (
+                          <ChevronDown size={16} />
+                        )}
+                      </button>
+                      {thoughtsExpanded[message.id] && (
+                        <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                          {message.reasoning}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 消息内容 */}
                   <div className="whitespace-pre-wrap break-words text-sm">
                     {message.content}
                     {message.isStreaming && (
                       <span className="inline-block ml-1 w-2 h-4 bg-current animate-pulse" />
                     )}
                   </div>
+
+                  {/* 时间戳 */}
                   <div className="text-xs opacity-70 mt-1">
                     {new Date(message.timestamp).toLocaleTimeString()}
+                  </div>
+
+                  {/* 消息操作按钮 */}
+                  <div
+                    className={`flex flex-wrap items-center gap-2 mt-3 ${
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                  >
+                    <button
+                      onClick={() => handleResendMessage(message)}
+                      className={getActionButtonClass(message.role)}
+                      disabled={isStreaming}
+                    >
+                      <RotateCw size={14} />
+                      <span>重发</span>
+                    </button>
+                    <button
+                      onClick={() => handleCopyMessage(message)}
+                      className={getActionButtonClass(message.role)}
+                      disabled={!message.content}
+                    >
+                      <Copy size={14} />
+                      <span>复制</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMessage(message)}
+                      className={getActionButtonClass(message.role)}
+                    >
+                      <Trash2 size={14} />
+                      <span>删除</span>
+                    </button>
                   </div>
                 </div>
               </div>

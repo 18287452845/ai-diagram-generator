@@ -247,7 +247,12 @@ async def chat_stream(request: ChatRequest, http_request: Request):
                 set_service_base_url(deepseek_service, request.aiProvider, base_urls)
                 original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys, base_urls)
                 async for chunk in deepseek_service.chat_stream(messages, request.diagramType, request.format):
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                    # DeepSeek returns dict with type and content
+                    if isinstance(chunk, dict):
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    else:
+                        # Fallback for string chunks
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
                 if original_key is not None:
                     os.environ['DEEPSEEK_API_KEY'] = original_key
                     settings.DEEPSEEK_API_KEY = original_key
