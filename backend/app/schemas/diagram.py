@@ -84,3 +84,16 @@ class ExplainDiagramRequest(BaseModel):
 
 class ExplainDiagramResponse(BaseModel):
     explanation: str
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    diagramType: DiagramType
+    format: DiagramFormat = DiagramFormat.DRAWIO
+    aiProvider: AIProvider
+    style: Optional[str] = None

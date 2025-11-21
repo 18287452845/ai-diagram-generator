@@ -64,3 +64,22 @@ export interface DrawioExportOptions extends ExportOptions {
   border?: number // Border width
   transparent?: boolean // Transparent background
 }
+
+// Chat message
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+  isStreaming?: boolean
+}
+
+// Chat conversation
+export interface ChatConversation {
+  id: string
+  messages: ChatMessage[]
+  diagramType: DiagramType
+  aiProvider: AIProvider
+  createdAt: string
+  updatedAt: string
+}

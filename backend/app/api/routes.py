@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
 import os
+import json
 
 from app.core.database import get_db
 from app.models.diagram import Diagram
@@ -17,6 +18,7 @@ from app.schemas.diagram import (
     ExplainDiagramRequest,
     ExplainDiagramResponse,
     AIProvider,
+    ChatRequest,
 )
 from app.services.ai.claude_service import claude_service
 from app.services.ai.openai_service import openai_service
@@ -197,6 +199,51 @@ async def explain_diagram(request: ExplainDiagramRequest, http_request: Request)
         return ExplainDiagramResponse(explanation=explanation)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
+
+
+@router.post("/ai/chat/stream")
+async def chat_stream(request: ChatRequest, http_request: Request):
+    """Stream AI chat responses with context"""
+    api_keys = get_api_keys_from_request(http_request)
+    base_urls = get_api_base_urls_from_request(http_request)
+    
+    async def generate():
+        try:
+            messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+            
+            if request.aiProvider == AIProvider.CLAUDE:
+                set_service_base_url(claude_service, request.aiProvider, base_urls)
+                original_key = set_service_api_key(claude_service, request.aiProvider, api_keys, base_urls)
+                async for chunk in claude_service.chat_stream(messages, request.diagramType, request.format):
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                if original_key is not None:
+                    os.environ['ANTHROPIC_API_KEY'] = original_key
+                    settings.ANTHROPIC_API_KEY = original_key
+                    claude_service._client = None
+            elif request.aiProvider == AIProvider.DEEPSEEK:
+                set_service_base_url(deepseek_service, request.aiProvider, base_urls)
+                original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys, base_urls)
+                async for chunk in deepseek_service.chat_stream(messages, request.diagramType, request.format):
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                if original_key is not None:
+                    os.environ['DEEPSEEK_API_KEY'] = original_key
+                    settings.DEEPSEEK_API_KEY = original_key
+                    deepseek_service._client = None
+            else:
+                set_service_base_url(openai_service, request.aiProvider, base_urls)
+                original_key = set_service_api_key(openai_service, request.aiProvider, api_keys, base_urls)
+                async for chunk in openai_service.chat_stream(messages, request.diagramType, request.format):
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                if original_key is not None:
+                    os.environ['OPENAI_API_KEY'] = original_key
+                    settings.OPENAI_API_KEY = original_key
+                    openai_service._client = None
+            
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 # CRUD endpoints for diagrams
