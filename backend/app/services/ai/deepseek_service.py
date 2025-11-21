@@ -7,7 +7,7 @@ class DeepSeekService:
     def __init__(self):
         self._client = None
         self.model = "deepseek-reasoner"  # DeepSeek R1 model
-        self.base_url = "https://api.deepseek.com"
+        self.base_url = "https://api.deepseek.com"  # Default base URL, can be overridden
 
     @property
     def client(self):

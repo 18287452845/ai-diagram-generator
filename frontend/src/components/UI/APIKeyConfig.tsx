@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Eye, EyeOff, Save, Trash2, Key, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Eye, EyeOff, Save, Trash2, Key, Globe, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useConfigStore } from '@/stores/configStore'
 
 interface APIKeyInputProps {
@@ -11,9 +11,17 @@ interface APIKeyInputProps {
   onChange: (value: string) => void
 }
 
+interface APIBaseUrlInputProps {
+  label: string
+  provider: 'anthropicBaseUrl' | 'openaiBaseUrl' | 'deepseekBaseUrl'
+  placeholder: string
+  description: string
+  value: string
+  onChange: (value: string) => void
+}
+
 function APIKeyInput({
   label,
-  provider,
   placeholder,
   description,
   value,
@@ -48,23 +56,64 @@ function APIKeyInput({
   )
 }
 
+function APIBaseUrlInput({
+  label,
+  placeholder,
+  description,
+  value,
+  onChange,
+}: APIBaseUrlInputProps) {
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300">
+        <Globe className="mr-2" size={16} />
+        {label}
+      </label>
+      <input
+        type="url"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      />
+      <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+    </div>
+  )
+}
+
 export default function APIKeyConfig() {
   const {
     apiKeys,
+    apiBaseUrls,
     useServerKeys,
     setAPIKey,
+    setAPIBaseUrl,
     setUseServerKeys,
     clearAPIKeys,
+    clearAPIBaseUrls,
     hasAPIKey,
   } = useConfigStore()
 
   const [localKeys, setLocalKeys] = useState(apiKeys)
+  const [localBaseUrls, setLocalBaseUrls] = useState(apiBaseUrls)
   const [saved, setSaved] = useState(false)
+
+  // Sync local state with store state
+  useEffect(() => {
+    setLocalKeys(apiKeys)
+  }, [apiKeys])
+
+  useEffect(() => {
+    setLocalBaseUrls(apiBaseUrls)
+  }, [apiBaseUrls])
 
   const handleSave = () => {
     setAPIKey('anthropicKey', localKeys.anthropicKey)
     setAPIKey('openaiKey', localKeys.openaiKey)
     setAPIKey('deepseekKey', localKeys.deepseekKey)
+    setAPIBaseUrl('anthropicBaseUrl', localBaseUrls.anthropicBaseUrl)
+    setAPIBaseUrl('openaiBaseUrl', localBaseUrls.openaiBaseUrl)
+    setAPIBaseUrl('deepseekBaseUrl', localBaseUrls.deepseekBaseUrl)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
@@ -75,7 +124,13 @@ export default function APIKeyConfig() {
       openaiKey: '',
       deepseekKey: '',
     })
+    setLocalBaseUrls({
+      anthropicBaseUrl: 'https://api.anthropic.com',
+      openaiBaseUrl: 'https://api.openai.com',
+      deepseekBaseUrl: 'https://api.deepseek.com',
+    })
     clearAPIKeys()
+    clearAPIBaseUrls()
   }
 
   const handleModeChange = (useServer: boolean) => {
@@ -93,7 +148,7 @@ export default function APIKeyConfig() {
           API密钥配置
         </h2>
         <p className="text-gray-600 dark:text-gray-400">
-          配置您的AI服务API密钥以使用图表生成功能
+          配置您的AI服务API密钥和基础URL以使用图表生成功能
         </p>
       </div>
 
@@ -181,6 +236,47 @@ export default function APIKeyConfig() {
             />
           </div>
 
+          {/* API Base URLs */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              API Base URLs
+            </h3>
+            <div className="space-y-6">
+              <APIBaseUrlInput
+                label="Claude (Anthropic) Base URL"
+                provider="anthropicBaseUrl"
+                placeholder="https://api.anthropic.com"
+                description="Anthropic API的基础URL，通常不需要修改"
+                value={localBaseUrls.anthropicBaseUrl}
+                onChange={(value) =>
+                  setLocalBaseUrls({ ...localBaseUrls, anthropicBaseUrl: value })
+                }
+              />
+
+              <APIBaseUrlInput
+                label="OpenAI Base URL"
+                provider="openaiBaseUrl"
+                placeholder="https://api.openai.com"
+                description="OpenAI API的基础URL，用于自定义代理或兼容服务"
+                value={localBaseUrls.openaiBaseUrl}
+                onChange={(value) =>
+                  setLocalBaseUrls({ ...localBaseUrls, openaiBaseUrl: value })
+                }
+              />
+
+              <APIBaseUrlInput
+                label="DeepSeek Base URL"
+                provider="deepseekBaseUrl"
+                placeholder="https://api.deepseek.com"
+                description="DeepSeek API的基础URL，通常不需要修改"
+                value={localBaseUrls.deepseekBaseUrl}
+                onChange={(value) =>
+                  setLocalBaseUrls({ ...localBaseUrls, deepseekBaseUrl: value })
+                }
+              />
+            </div>
+          </div>
+
           {/* Action Buttons */}
           <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
@@ -188,7 +284,7 @@ export default function APIKeyConfig() {
               className="flex items-center px-4 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium transition-colors"
             >
               <Trash2 className="mr-2" size={18} />
-              清除所有密钥
+              清除所有配置
             </button>
             <button
               onClick={handleSave}

@@ -12,6 +12,12 @@ export enum DiagramType {
   ROADMAP = 'roadmap',
 }
 
+// Diagram formats
+export enum DiagramFormat {
+  MERMAID = 'mermaid',
+  DRAWIO = 'drawio',
+}
+
 // AI Providers
 export enum AIProvider {
   CLAUDE = 'claude',

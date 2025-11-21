@@ -7,6 +7,7 @@ class OpenAIService:
     def __init__(self):
         self._client = None
         self.model = "gpt-4-turbo-preview"
+        self.base_url = None  # Can be overridden for custom endpoints
     
     @property
     def client(self):
@@ -14,7 +15,12 @@ class OpenAIService:
         if self._client is None:
             if not settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY is not set")
-            self._client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            
+            client_kwargs = {"api_key": settings.OPENAI_API_KEY}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+                
+            self._client = AsyncOpenAI(**client_kwargs)
         return self._client
 
     def _get_system_prompt(self, diagram_type: DiagramType) -> str:

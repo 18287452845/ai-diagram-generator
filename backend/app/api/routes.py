@@ -36,8 +36,17 @@ def get_api_keys_from_request(request: Request) -> dict:
     }
 
 
-def set_service_api_key(service, provider: AIProvider, api_keys: dict):
-    """Temporarily set API key for a service if client-side key is provided"""
+def get_api_base_urls_from_request(request: Request) -> dict:
+    """Extract API base URLs from request headers"""
+    return {
+        'anthropic': request.headers.get('X-Anthropic-Base-Url'),
+        'openai': request.headers.get('X-OpenAI-Base-Url'),
+        'deepseek': request.headers.get('X-DeepSeek-Base-Url'),
+    }
+
+
+def set_service_api_key(service, provider: AIProvider, api_keys: dict, base_urls: dict):
+    """Temporarily set API key and base URL for a service if client-side values are provided"""
     if provider == AIProvider.CLAUDE and api_keys['anthropic']:
         # Temporarily override the API key
         original_key = os.environ.get('ANTHROPIC_API_KEY')
@@ -61,15 +70,27 @@ def set_service_api_key(service, provider: AIProvider, api_keys: dict):
     return None
 
 
+def set_service_base_url(service, provider: AIProvider, base_urls: dict):
+    """Set custom base URL for a service if provided"""
+    if provider == AIProvider.CLAUDE and base_urls.get('anthropic'):
+        service.base_url = base_urls['anthropic']
+    elif provider == AIProvider.OPENAI and base_urls.get('openai'):
+        service.base_url = base_urls['openai']
+    elif provider == AIProvider.DEEPSEEK and base_urls.get('deepseek'):
+        service.base_url = base_urls['deepseek']
+
+
 # AI Generation endpoints
 @router.post("/ai/generate", response_model=GenerateDiagramResponse)
 async def generate_diagram(request: GenerateDiagramRequest, http_request: Request):
     """Generate diagram using AI"""
     api_keys = get_api_keys_from_request(http_request)
+    base_urls = get_api_base_urls_from_request(http_request)
 
     try:
         if request.aiProvider == AIProvider.CLAUDE:
-            original_key = set_service_api_key(claude_service, request.aiProvider, api_keys)
+            set_service_base_url(claude_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(claude_service, request.aiProvider, api_keys, base_urls)
             code = await claude_service.generate_diagram(
                 request.description, request.diagramType, request.format
             )
@@ -77,22 +98,27 @@ async def generate_diagram(request: GenerateDiagramRequest, http_request: Reques
             if original_key is not None:
                 os.environ['ANTHROPIC_API_KEY'] = original_key
                 settings.ANTHROPIC_API_KEY = original_key
+                claude_service._client = None
         elif request.aiProvider == AIProvider.DEEPSEEK:
-            original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys)
+            set_service_base_url(deepseek_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys, base_urls)
             code = await deepseek_service.generate_diagram(
                 request.description, request.diagramType, request.format
             )
             if original_key is not None:
                 os.environ['DEEPSEEK_API_KEY'] = original_key
                 settings.DEEPSEEK_API_KEY = original_key
+                deepseek_service._client = None
         else:
-            original_key = set_service_api_key(openai_service, request.aiProvider, api_keys)
+            set_service_base_url(openai_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(openai_service, request.aiProvider, api_keys, base_urls)
             code = await openai_service.generate_diagram(
                 request.description, request.diagramType, request.format
             )
             if original_key is not None:
                 os.environ['OPENAI_API_KEY'] = original_key
                 settings.OPENAI_API_KEY = original_key
+                openai_service._client = None
 
         return GenerateDiagramResponse(code=code)
     except Exception as e:
@@ -103,26 +129,33 @@ async def generate_diagram(request: GenerateDiagramRequest, http_request: Reques
 async def refine_diagram(request: RefineDiagramRequest, http_request: Request):
     """Refine existing diagram with instruction"""
     api_keys = get_api_keys_from_request(http_request)
+    base_urls = get_api_base_urls_from_request(http_request)
 
     try:
         if request.aiProvider == AIProvider.CLAUDE:
-            original_key = set_service_api_key(claude_service, request.aiProvider, api_keys)
+            set_service_base_url(claude_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(claude_service, request.aiProvider, api_keys, base_urls)
             code = await claude_service.refine_diagram(request.code, request.instruction, request.format)
             if original_key is not None:
                 os.environ['ANTHROPIC_API_KEY'] = original_key
                 settings.ANTHROPIC_API_KEY = original_key
+                claude_service._client = None
         elif request.aiProvider == AIProvider.DEEPSEEK:
-            original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys)
+            set_service_base_url(deepseek_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys, base_urls)
             code = await deepseek_service.refine_diagram(request.code, request.instruction, request.format)
             if original_key is not None:
                 os.environ['DEEPSEEK_API_KEY'] = original_key
                 settings.DEEPSEEK_API_KEY = original_key
+                deepseek_service._client = None
         else:
-            original_key = set_service_api_key(openai_service, request.aiProvider, api_keys)
+            set_service_base_url(openai_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(openai_service, request.aiProvider, api_keys, base_urls)
             code = await openai_service.refine_diagram(request.code, request.instruction, request.format)
             if original_key is not None:
                 os.environ['OPENAI_API_KEY'] = original_key
                 settings.OPENAI_API_KEY = original_key
+                openai_service._client = None
 
         return GenerateDiagramResponse(code=code)
     except Exception as e:
@@ -133,26 +166,33 @@ async def refine_diagram(request: RefineDiagramRequest, http_request: Request):
 async def explain_diagram(request: ExplainDiagramRequest, http_request: Request):
     """Explain diagram in natural language"""
     api_keys = get_api_keys_from_request(http_request)
+    base_urls = get_api_base_urls_from_request(http_request)
 
     try:
         if request.aiProvider == AIProvider.CLAUDE:
-            original_key = set_service_api_key(claude_service, request.aiProvider, api_keys)
+            set_service_base_url(claude_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(claude_service, request.aiProvider, api_keys, base_urls)
             explanation = await claude_service.explain_diagram(request.code, request.format)
             if original_key is not None:
                 os.environ['ANTHROPIC_API_KEY'] = original_key
                 settings.ANTHROPIC_API_KEY = original_key
+                claude_service._client = None
         elif request.aiProvider == AIProvider.DEEPSEEK:
-            original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys)
+            set_service_base_url(deepseek_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(deepseek_service, request.aiProvider, api_keys, base_urls)
             explanation = await deepseek_service.explain_diagram(request.code, request.format)
             if original_key is not None:
                 os.environ['DEEPSEEK_API_KEY'] = original_key
                 settings.DEEPSEEK_API_KEY = original_key
+                deepseek_service._client = None
         else:
-            original_key = set_service_api_key(openai_service, request.aiProvider, api_keys)
+            set_service_base_url(openai_service, request.aiProvider, base_urls)
+            original_key = set_service_api_key(openai_service, request.aiProvider, api_keys, base_urls)
             explanation = await openai_service.explain_diagram(request.code, request.format)
             if original_key is not None:
                 os.environ['OPENAI_API_KEY'] = original_key
                 settings.OPENAI_API_KEY = original_key
+                openai_service._client = None
 
         return ExplainDiagramResponse(explanation=explanation)
     except Exception as e:
