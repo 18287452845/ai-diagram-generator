@@ -100,7 +100,7 @@ class ClaudeService:
     def _get_drawio_prompt(self, diagram_type: DiagramType) -> str:
         """Get Draw.io-specific prompts"""
         base_prompt = """
-你是专业的图表设计专家。用户会用自然语言描述需求，你需要生成Draw.io XML格式的图表代码。
+你是专业的图表设计专家和Draw.io专家。用户会用自然语言描述需求，你需要生成高质量、美观的Draw.io XML格式图表代码。
 
 Draw.io XML格式要求：
 - 使用标准的mxfile结构
@@ -123,12 +123,15 @@ Draw.io XML格式要求：
   </diagram>
 </mxfile>
 
-重要规则：
-1. 节点ID必须唯一，从2开始递增
-2. 合理布局：节点垂直间距80-120像素，水平间距150-200像素
-3. 颜色搭配协调：使用fillColor和strokeColor
-4. 节点大小合适：一般width=120, height=60
-5. 连接线使用edgeStyle=orthogonalEdgeStyle保持正交
+重要规则（请严格遵守）：
+1. 节点ID必须唯一，从2开始递增（切勿重复ID）
+2. 优化布局：节点垂直间距100-150像素，水平间距180-250像素，确保图表清晰易读
+3. 配色美观：使用协调的颜色方案，fillColor和strokeColor搭配合理
+4. 节点大小合适：根据文本内容调整，一般width=120-200, height=60-80
+5. 连接线优化：使用edgeStyle=orthogonalEdgeStyle保持正交，strokeWidth=2增强视觉效果
+6. 字体大小：使用fontSize=12或14保证可读性
+7. 居中对齐：使用align=center;verticalAlign=middle使文本居中
+8. 添加阴影和圆角：使用rounded=1;shadow=1增强美观度
 
 """
         type_specific = {

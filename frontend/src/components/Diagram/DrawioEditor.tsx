@@ -35,7 +35,8 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
   const [isLoaded, setIsLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const valueRef = useRef(value)
-  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastLoadedValueRef = useRef<string | null>(null)
   const DEBUG = false // Set to true to enable debug logging
 
   // Update ref to keep latest value
@@ -50,7 +51,7 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
         console.warn('Draw.io init timeout - forcing load state')
         setIsLoaded(true)
       }
-    }, 5000) // 5 second timeout (reduced since we now handle 'configure' event)
+    }, 3000) // Reduced to 3 seconds for better UX
 
     return () => {
       if (loadTimeoutRef.current) {
@@ -76,6 +77,12 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
   const loadDiagram = useCallback(() => {
     if (!isLoaded) return
 
+    // Check if we've already loaded this value
+    if (lastLoadedValueRef.current === value) {
+      if (DEBUG) console.log('Skipping load - value already loaded')
+      return
+    }
+
     try {
       if (DEBUG) console.log('Loading diagram with value:', value?.substring(0, 100))
       if (value && value.trim()) {
@@ -85,6 +92,7 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
           xml: value,
           autosave: 1,
         })
+        lastLoadedValueRef.current = value
       } else {
         // Load blank diagram
         const emptyXml = getEmptyDiagram()
@@ -94,6 +102,7 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
           xml: emptyXml,
           autosave: 1,
         })
+        lastLoadedValueRef.current = emptyXml
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
@@ -134,13 +143,17 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
           case 'save':
             // User clicked save or autosave triggered
             if (message.xml && onChange) {
+              if (DEBUG) console.log('Diagram saved')
+              lastLoadedValueRef.current = message.xml
               onChange(message.xml)
             }
             break
 
           case 'autosave':
-            // Autosave event
+            // Autosave event (fires after every change)
             if (message.xml && onChange) {
+              if (DEBUG) console.log('Diagram auto-saved')
+              lastLoadedValueRef.current = message.xml
               onChange(message.xml)
             }
             break
@@ -242,10 +255,16 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
 
         try {
           const message = JSON.parse(event.data) as DrawioMessage
-          if (message.event === 'save') {
+          if (message.event === 'export') {
             clearTimeout(timeout)
             window.removeEventListener('message', handleXmlMessage)
-            resolve(message.xml || '')
+            if (message.xml) {
+              resolve(message.xml)
+            } else if (message.data) {
+              resolve(message.data)
+            } else {
+              resolve('')
+            }
           }
         } catch (err) {
           clearTimeout(timeout)
@@ -255,7 +274,7 @@ export const DrawioEditor = React.forwardRef<DrawioEditorRef, DrawioEditorProps>
       }
 
       window.addEventListener('message', handleXmlMessage)
-      postMessage({ action: 'export', format: 'xml' })
+      postMessage({ action: 'export', format: 'xml', xml: valueRef.current })
     })
   }, [postMessage])
 
