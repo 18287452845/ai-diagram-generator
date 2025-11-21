@@ -294,5 +294,18 @@ ER图要求：
 
         return message.content[0].text
 
+    async def chat_stream(self, messages: list[dict], diagram_type: DiagramType, diagram_format: DiagramFormat = DiagramFormat.DRAWIO):
+        """Stream chat responses with context"""
+        system_prompt = self._get_system_prompt(diagram_type, diagram_format)
+        
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=4000,
+            system=system_prompt,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+
 
 claude_service = ClaudeService()

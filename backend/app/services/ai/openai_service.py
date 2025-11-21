@@ -134,5 +134,22 @@ class OpenAIService:
 
         return response.choices[0].message.content
 
+    async def chat_stream(self, messages: list[dict], diagram_type: DiagramType, diagram_format: DiagramFormat = DiagramFormat.DRAWIO):
+        """Stream chat responses with context"""
+        system_prompt = self._get_system_prompt(diagram_type)
+        
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+        
+        stream = await self.client.chat.completions.create(
+            model=self.model,
+            messages=full_messages,
+            max_tokens=4000,
+            stream=True,
+        )
+        
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
 
 openai_service = OpenAIService()

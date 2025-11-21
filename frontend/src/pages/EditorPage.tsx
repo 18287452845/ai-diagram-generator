@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Save, Undo, Redo, Home, Code2, Eye } from 'lucide-react'
-import AIInputPanel from '@/components/Editor/AIInputPanel'
+import AIChatPanel from '@/components/Editor/AIChatPanel'
 import CodeEditor from '@/components/Editor/CodeEditor'
 import DrawioEditor, { DrawioEditorRef } from '@/components/Diagram/DrawioEditor'
 import ExportButton from '@/components/UI/ExportButton'
@@ -289,9 +289,9 @@ function EditorPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - AI Input */}
-        <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
-          <AIInputPanel
+        {/* Left Panel - AI Chat */}
+        <div className="w-96 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+          <AIChatPanel
             onGenerate={handleAIGenerate}
             onGeneratingChange={setIsGenerating}
           />
