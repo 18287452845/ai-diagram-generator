@@ -82,6 +82,25 @@ def set_service_base_url(service, provider: AIProvider, base_urls: dict):
         service.base_url = base_urls['deepseek']
 
 
+def sanitize_chat_messages(messages: list[dict]) -> list[dict]:
+    """Ensure chat history alternates roles and excludes empty entries"""
+    sanitized = []
+    for msg in messages:
+        role = msg.get('role')
+        content = msg.get('content')
+        if role not in {'user', 'assistant'} or not isinstance(content, str):
+            continue
+        if not content.strip():
+            continue
+        if not sanitized and role != 'user':
+            continue
+        if sanitized and sanitized[-1]['role'] == role and role == 'assistant':
+            # Skip duplicate assistant entries (e.g., streaming placeholders)
+            continue
+        sanitized.append({'role': role, 'content': content})
+    return sanitized
+
+
 # AI Generation endpoints
 @router.post("/ai/generate", response_model=GenerateDiagramResponse)
 async def generate_diagram(request: GenerateDiagramRequest, http_request: Request):
@@ -206,11 +225,15 @@ async def chat_stream(request: ChatRequest, http_request: Request):
     """Stream AI chat responses with context"""
     api_keys = get_api_keys_from_request(http_request)
     base_urls = get_api_base_urls_from_request(http_request)
+    raw_messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+    messages = sanitize_chat_messages(raw_messages)
+    if not messages:
+        raise HTTPException(status_code=400, detail="No valid chat messages provided")
+    if messages[-1]['role'] != 'user':
+        raise HTTPException(status_code=400, detail="Latest message must come from the user")
     
     async def generate():
         try:
-            messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-            
             if request.aiProvider == AIProvider.CLAUDE:
                 set_service_base_url(claude_service, request.aiProvider, base_urls)
                 original_key = set_service_api_key(claude_service, request.aiProvider, api_keys, base_urls)
