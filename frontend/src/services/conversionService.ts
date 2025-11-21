@@ -57,7 +57,7 @@ export const conversionService = {
       const edgeMatch = line.match(/^([A-Za-z0-9_]+(?:\[.*?\]|\{.*?\}|\(\[.*?\]\)|\(\(.*?\)\))?)\s*(-->|->)(?:\|([^|]+)\|)?\s*([A-Za-z0-9_]+(?:\[.*?\]|\{.*?\}|\(\[.*?\]\)|\(\(.*?\)\))?)$/)
 
       if (edgeMatch) {
-        const [, fromRef, arrow, edgeLabel, toRef] = edgeMatch
+        const [, fromRef, , edgeLabel, toRef] = edgeMatch
 
         // Extract from node
         let fromNode = extractNode(fromRef)

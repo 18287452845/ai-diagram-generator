@@ -7,13 +7,23 @@ export interface APIKeys {
   deepseekKey: string
 }
 
+export interface APIBaseUrls {
+  anthropicBaseUrl: string
+  openaiBaseUrl: string
+  deepseekBaseUrl: string
+}
+
 export interface ConfigState {
   apiKeys: APIKeys
+  apiBaseUrls: APIBaseUrls
   useServerKeys: boolean
   setAPIKey: (provider: keyof APIKeys, key: string) => void
+  setAPIBaseUrl: (provider: keyof APIBaseUrls, baseUrl: string) => void
   setUseServerKeys: (use: boolean) => void
   clearAPIKeys: () => void
+  clearAPIBaseUrls: () => void
   getAPIKey: (provider: keyof APIKeys) => string
+  getAPIBaseUrl: (provider: keyof APIBaseUrls) => string
   hasAPIKey: (provider: keyof APIKeys) => boolean
 }
 
@@ -23,10 +33,17 @@ const initialAPIKeys: APIKeys = {
   deepseekKey: '',
 }
 
+const initialAPIBaseUrls: APIBaseUrls = {
+  anthropicBaseUrl: 'https://api.anthropic.com',
+  openaiBaseUrl: 'https://api.openai.com',
+  deepseekBaseUrl: 'https://api.deepseek.com',
+}
+
 export const useConfigStore = create<ConfigState>()(
   persist(
     (set, get) => ({
       apiKeys: initialAPIKeys,
+      apiBaseUrls: initialAPIBaseUrls,
       useServerKeys: true, // Default to using server-side keys
 
       setAPIKey: (provider, key) =>
@@ -37,15 +54,31 @@ export const useConfigStore = create<ConfigState>()(
           },
         })),
 
+      setAPIBaseUrl: (provider, baseUrl) =>
+        set((state) => ({
+          apiBaseUrls: {
+            ...state.apiBaseUrls,
+            [provider]: baseUrl,
+          },
+        })),
+
       setUseServerKeys: (use) =>
         set({ useServerKeys: use }),
 
       clearAPIKeys: () =>
         set({ apiKeys: initialAPIKeys }),
 
+      clearAPIBaseUrls: () =>
+        set({ apiBaseUrls: initialAPIBaseUrls }),
+
       getAPIKey: (provider) => {
         const state = get()
         return state.useServerKeys ? '' : state.apiKeys[provider]
+      },
+
+      getAPIBaseUrl: (provider) => {
+        const state = get()
+        return state.useServerKeys ? '' : state.apiBaseUrls[provider]
       },
 
       hasAPIKey: (provider) => {
@@ -56,9 +89,10 @@ export const useConfigStore = create<ConfigState>()(
     }),
     {
       name: 'ai-diagram-config', // localStorage key
-      // Only persist API keys if not using server keys
+      // Only persist API keys and base URLs if not using server keys
       partialize: (state) => ({
         apiKeys: state.useServerKeys ? initialAPIKeys : state.apiKeys,
+        apiBaseUrls: state.useServerKeys ? initialAPIBaseUrls : state.apiBaseUrls,
         useServerKeys: state.useServerKeys,
       }),
     }

@@ -7,6 +7,7 @@ class ClaudeService:
     def __init__(self):
         self._client = None
         self.model = "claude-3-5-sonnet-20241022"
+        self.base_url = None  # Can be overridden for custom endpoints
 
     @property
     def client(self):
@@ -14,7 +15,12 @@ class ClaudeService:
         if self._client is None:
             if not settings.ANTHROPIC_API_KEY:
                 raise ValueError("ANTHROPIC_API_KEY is not set")
-            self._client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+            
+            client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+                
+            self._client = Anthropic(**client_kwargs)
         return self._client
 
     def _get_system_prompt(self, diagram_type: DiagramType, diagram_format: DiagramFormat = DiagramFormat.MERMAID) -> str:

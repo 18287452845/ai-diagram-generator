@@ -23,15 +23,24 @@ apiClient.interceptors.request.use(
     // Add client-side API keys if configured
     const configState = useConfigStore.getState()
     if (!configState.useServerKeys) {
-      const { apiKeys } = configState
+      const { apiKeys, apiBaseUrls } = configState
       if (apiKeys.anthropicKey) {
         config.headers['X-Anthropic-Key'] = apiKeys.anthropicKey
+      }
+      if (apiBaseUrls.anthropicBaseUrl) {
+        config.headers['X-Anthropic-Base-Url'] = apiBaseUrls.anthropicBaseUrl
       }
       if (apiKeys.openaiKey) {
         config.headers['X-OpenAI-Key'] = apiKeys.openaiKey
       }
+      if (apiBaseUrls.openaiBaseUrl) {
+        config.headers['X-OpenAI-Base-Url'] = apiBaseUrls.openaiBaseUrl
+      }
       if (apiKeys.deepseekKey) {
         config.headers['X-DeepSeek-Key'] = apiKeys.deepseekKey
+      }
+      if (apiBaseUrls.deepseekBaseUrl) {
+        config.headers['X-DeepSeek-Base-Url'] = apiBaseUrls.deepseekBaseUrl
       }
     }
 

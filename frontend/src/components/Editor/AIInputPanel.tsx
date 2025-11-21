@@ -83,11 +83,17 @@ function AIInputPanel({ onGenerate, onGeneratingChange }: AIInputPanelProps) {
   }
 
   // Quick examples for better UX
-  const examples = {
+  const examples: Record<DiagramType, string> = {
     [DiagramType.FLOWCHART]: '电商用户下单流程：浏览商品 → 加入购物车 → 结算 → 支付 → 订单确认',
     [DiagramType.ARCHITECTURE]: 'Web应用架构：前端React + 后端FastAPI + 数据库PostgreSQL + 缓存Redis',
     [DiagramType.SEQUENCE]: '用户登录时序图：用户输入 → 前端验证 → API请求 → 数据库查询 → 返回Token',
     [DiagramType.ER]: '博客系统：用户表(user_id, name) 一对多 文章表(post_id, user_id, title)',
+    [DiagramType.GANTT]: '项目开发计划：需求分析2周 → 设计1周 → 开发4周 → 测试2周 → 部署1周',
+    [DiagramType.SWIMLANE]: '订单处理流程：客户下单(客户泳道) → 系统处理(系统泳道) → 物流配送(物流泳道)',
+    [DiagramType.CLASS]: '用户管理系统：User类(id, name, email) 继承 Person类，关联 Order类',
+    [DiagramType.STATE]: '订单状态流转：待支付 → 已支付 → 配送中 → 已完成 → 已取消',
+    [DiagramType.MINDMAP]: 'AI技术栈：机器学习 → 监督学习/无监督学习 → 算法/框架/工具',
+    [DiagramType.ROADMAP]: '产品发展路线：Q1需求调研 → Q2原型设计 → Q3开发测试 → Q4正式发布',
   }
 
   const fillExample = () => {

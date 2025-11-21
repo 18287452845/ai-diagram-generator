@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Diagram, DiagramType, AIProvider } from '@/types/diagram'
+import type { Diagram } from '@/types/diagram'
 
 interface DiagramStore {
   currentDiagram: Diagram | null
