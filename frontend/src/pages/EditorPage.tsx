@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Save, Undo, Redo, Home, Code2, Eye } from 'lucide-react'
 import AIInputPanel from '@/components/Editor/AIInputPanel'
@@ -6,6 +6,7 @@ import CodeEditor from '@/components/Editor/CodeEditor'
 import DrawioEditor, { DrawioEditorRef } from '@/components/Diagram/DrawioEditor'
 import ExportButton from '@/components/UI/ExportButton'
 import ThemeToggle from '@/components/UI/ThemeToggle'
+import SaveIndicator from '@/components/UI/SaveIndicator'
 import { diagramService } from '@/services/diagramService'
 import { DiagramType } from '@/types/diagram'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -20,14 +21,22 @@ function EditorPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('visual')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [history, setHistory] = useState<string[]>([getDefaultDrawioXml()])
   const [historyIndex, setHistoryIndex] = useState(0)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => Boolean(id))
   const drawioEditorRef = useRef<DrawioEditorRef>(null)
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load diagram if ID is provided
   useEffect(() => {
     if (id) {
       loadDiagram(id)
+      setAutoSaveEnabled(true)
+    } else {
+      setAutoSaveEnabled(false)
+      setLastSaved(null)
     }
   }, [id])
 
@@ -38,16 +47,61 @@ function EditorPage() {
       setTitle(diagram.title)
       setHistory([diagram.code])
       setHistoryIndex(0)
+      setHasUnsavedChanges(false)
+
+      const updatedAt = diagram.updatedAt || (diagram as any).updated_at
+      setLastSaved(updatedAt ? new Date(updatedAt) : new Date())
     } catch (error) {
       console.error('Failed to load diagram:', error)
       alert('加载图表失败')
     }
   }
 
+  // Auto-save functionality
+  const performAutoSave = useCallback(async () => {
+    if (!id || !hasUnsavedChanges || isSaving) return
+
+    try {
+      setIsSaving(true)
+      await diagramService.update(id, { code, title })
+      setLastSaved(new Date())
+      setHasUnsavedChanges(false)
+    } catch (error) {
+      console.error('Auto-save failed:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [id, code, title, hasUnsavedChanges, isSaving])
+
+  // Trigger auto-save after 3 seconds of inactivity
+  useEffect(() => {
+    if (hasUnsavedChanges && autoSaveEnabled && id) {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        performAutoSave()
+      }, 3000)
+    }
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [hasUnsavedChanges, autoSaveEnabled, id, performAutoSave])
+
   const handleCodeChange = (newCode: string) => {
+    if (newCode === code) return
+
     setCode(newCode)
+    setHasUnsavedChanges(true)
     // Add to history
     const newHistory = history.slice(0, historyIndex + 1)
+    if (newHistory[newHistory.length - 1] === newCode) {
+      return
+    }
     newHistory.push(newCode)
     setHistory(newHistory)
     setHistoryIndex(newHistory.length - 1)
@@ -57,6 +111,7 @@ function EditorPage() {
     if (historyIndex > 0) {
       setHistoryIndex(historyIndex - 1)
       setCode(history[historyIndex - 1])
+      setHasUnsavedChanges(true)
     }
   }
 
@@ -64,6 +119,7 @@ function EditorPage() {
     if (historyIndex < history.length - 1) {
       setHistoryIndex(historyIndex + 1)
       setCode(history[historyIndex + 1])
+      setHasUnsavedChanges(true)
     }
   }
 
@@ -73,6 +129,8 @@ function EditorPage() {
       if (id) {
         // Update existing
         await diagramService.update(id, { code, title })
+        setLastSaved(new Date())
+        setHasUnsavedChanges(false)
         alert('保存成功！')
       } else {
         // Create new
@@ -81,6 +139,9 @@ function EditorPage() {
           type: DiagramType.FLOWCHART,
           code,
         })
+        setLastSaved(new Date())
+        setHasUnsavedChanges(false)
+        setAutoSaveEnabled(true)
         alert('保存成功！')
         navigate(`/editor/${diagram.id}`)
       }
@@ -95,6 +156,11 @@ function EditorPage() {
   const handleAIGenerate = (generatedCode: string) => {
     handleCodeChange(generatedCode)
     setIsGenerating(false)
+  }
+
+  const handleTitleChange = (newTitle: string) => {
+    setTitle(newTitle)
+    setHasUnsavedChanges(true)
   }
 
   // Keyboard shortcuts
@@ -134,7 +200,7 @@ function EditorPage() {
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               className="text-xl font-semibold text-gray-900 dark:text-white bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2"
             />
 
@@ -143,61 +209,82 @@ function EditorPage() {
               Draw.io 可视化
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md p-1">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md p-1">
+                <button
+                  onClick={() => setViewMode('visual')}
+                  className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${
+                    viewMode === 'visual'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Eye size={14} />
+                  可视化
+                </button>
+                <button
+                  onClick={() => setViewMode('code')}
+                  className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${
+                    viewMode === 'code'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Code2 size={14} />
+                  代码
+                </button>
+              </div>
+
+              <ThemeToggle />
               <button
-                onClick={() => setViewMode('visual')}
-                className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${
-                  viewMode === 'visual'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
+                onClick={handleUndo}
+                disabled={historyIndex === 0}
+                className="p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                title="撤销 (Ctrl+Z)"
               >
-                <Eye size={14} />
-                可视化
+                <Undo size={16} />
               </button>
               <button
-                onClick={() => setViewMode('code')}
-                className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${
-                  viewMode === 'code'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
+                onClick={handleRedo}
+                disabled={historyIndex === history.length - 1}
+                className="p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                title="重做 (Ctrl+Y)"
               >
-                <Code2 size={14} />
-                代码
+                <Redo size={16} />
               </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !code.trim()}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save size={16} />
+                {isSaving ? '保存中...' : '保存'}
+              </button>
+              <ExportButton code={code} title={title} editorRef={drawioEditorRef.current} />
             </div>
 
-            <ThemeToggle />
-            <button
-              onClick={handleUndo}
-              disabled={historyIndex === 0}
-              className="p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-              title="撤销 (Ctrl+Z)"
-            >
-              <Undo size={16} />
-            </button>
-            <button
-              onClick={handleRedo}
-              disabled={historyIndex === history.length - 1}
-              className="p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-              title="重做 (Ctrl+Y)"
-            >
-              <Redo size={16} />
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving || !code.trim()}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save size={16} />
-              {isSaving ? '保存中...' : '保存'}
-            </button>
-            <ExportButton code={code} title={title} editorRef={drawioEditorRef.current} />
+            <div className="flex flex-col items-end gap-1 text-xs text-gray-500 dark:text-gray-400">
+              <label className={`flex items-center gap-2 ${!id ? 'opacity-50' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={autoSaveEnabled}
+                  onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                  disabled={!id}
+                  className="rounded focus:ring-blue-500"
+                />
+                自动保存{!id ? '（保存后可用）' : ''}
+              </label>
+              <SaveIndicator
+                lastSaved={lastSaved}
+                hasUnsavedChanges={hasUnsavedChanges}
+                isSaving={isSaving}
+                autoSaveEnabled={autoSaveEnabled && Boolean(id)}
+              />
+            </div>
           </div>
-        </div>
+        </div
       </header>
 
       {/* Main Content */}
