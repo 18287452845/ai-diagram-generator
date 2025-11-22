@@ -292,7 +292,7 @@ ER图要求：
         return response.choices[0].message.content
 
     async def chat_stream(self, messages: list[dict], diagram_type: DiagramType, diagram_format: DiagramFormat = DiagramFormat.DRAWIO):
-        """Stream chat responses with context"""
+        """Stream chat responses with context, handling DeepSeek R1 reasoning"""
         system_prompt = self._get_system_prompt(diagram_type, diagram_format)
         
         full_messages = [{"role": "system", "content": system_prompt}] + messages
@@ -305,8 +305,41 @@ ER图要求：
         )
         
         async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            def extract_text(parts):
+                if not parts:
+                    return ""
+                if isinstance(parts, str):
+                    return parts
+                texts = []
+                for part in parts:
+                    if isinstance(part, str):
+                        texts.append(part)
+                    elif isinstance(part, dict):
+                        if part.get('text'):
+                            texts.append(part['text'])
+                    else:
+                        text_value = getattr(part, 'text', None)
+                        if text_value:
+                            texts.append(text_value)
+                return ''.join(texts)
+
+            reasoning_text = extract_text(getattr(delta, 'reasoning_content', None))
+            if reasoning_text:
+                yield {
+                    'type': 'reasoning',
+                    'content': reasoning_text
+                }
+
+            content_text = extract_text(getattr(delta, 'content', None))
+            if content_text:
+                yield {
+                    'type': 'content',
+                    'content': content_text
+                }
 
 
 deepseek_service = DeepSeekService()
